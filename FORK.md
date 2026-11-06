@@ -155,7 +155,15 @@ cannot silently restore them.
 ## Maintenance and installation
 
 Read [the operations guide](docs/operations/personal-fork.md) for explicit batched releases, daily upstream
-inspection, weekly decisions and all-host deployment. `.t3-fork/` is ignored
+integration, weekly decisions and all-host deployment. `.t3-fork/` is ignored
 installation-local configuration and runtime state, not product source.
 The old Ubuntu sync timer is superseded; `scripts/personal-sync.sh` is a guard
 that refuses to run the obsolete nested-agent workflow.
+
+The maintenance tooling and four fork skills originate from
+[ralfboltshauser/t3code](https://github.com/ralfboltshauser/t3code/tree/32f97584a7262856e18b7b0de4de49525bd88ece),
+adapted for `dev`, Kreditanstalt and worker1337. The remote SSH runner honors
+`~/.t3/fork-runner` so maintenance owns its runtime and reconnects cannot select
+an official archive. A missing configured executable fails closed. Its regression
+check is `vp test run packages/ssh/src/tunnel.test.ts`. Deployment fixtures run
+with `python3 -m unittest discover -s scripts/personal-fork -p 'test_*.py'`.

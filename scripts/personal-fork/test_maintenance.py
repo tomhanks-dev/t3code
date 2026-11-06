@@ -70,6 +70,23 @@ class DeploymentTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             manage.deploy()
 
+    def test_bootstrap_accepts_only_the_recorded_initial_installations(self):
+        self.installed['ubuntu'] = 'official:0.1.7'
+        for entry in self.config['hosts']:
+            entry['bootstrap'] = {'installed': self.installed[entry['id']]}
+        self.write_pending()
+        host.atomic_json(self.root / 'idle-observation.json', {'commit': self.target, 'inventory_sha256': manage.fingerprint(self.config), 'at': time.time() - 120})
+        self.deploy()
+        self.assertEqual(set(self.installed.values()), {self.target})
+
+    def test_matching_markers_do_not_complete_an_unhealthy_deployment(self):
+        self.installed = {identity: self.target for identity in self.installed}
+        self.fail = ('ubuntu', 'verify')
+        with self.assertRaises(RuntimeError):
+            self.deploy()
+        self.assertTrue((self.root / 'pending.json').exists())
+        self.assertFalse((self.root / 'last-deployment.json').exists())
+
     def test_busy_host_postpones_everyone(self):
         self.busy["ubuntu"] = {"turns": 1}
         self.deploy()
@@ -173,6 +190,41 @@ class DatabaseGuardTest(unittest.TestCase):
             with self.assertRaises(sqlite3.OperationalError):
                 host.database_busy(database)
             self.assertEqual(database.read_bytes(), before)
+
+
+class BootstrapHostTest(unittest.TestCase):
+    def test_initial_mac_activation_and_prestart_restore_preserve_the_dev_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            commit = 'b' * 40
+            app = root / 'Applications/Personal.app'
+            staging = root / 'staging'
+            target = staging / commit / 'T3 Code (Personal).app'
+            target.mkdir(parents=True)
+            (target / 'binary').write_text('new')
+            host.atomic_json(host.manifest_path(target), host.artifact_manifest(target))
+            value = {'platform': 'mac', 'app': str(app), 'home': str(root / 'home'),
+                     'stage_root': str(staging), 'bootstrap': {'installed': 'development'}}
+            with patch.object(host, 'stopped_check'), patch.object(host, 'target_ready', return_value=True):
+                host.activate(value, commit)
+                self.assertTrue(app.exists())
+                self.assertTrue(host.artifact_valid(app))
+                host.restore_before_start(value, commit, 'development')
+            self.assertFalse(app.exists())
+            self.assertTrue((staging / commit / 'failed.app').exists())
+            self.assertEqual(host.installed(value), 'development')
+
+
+class ArtifactTest(unittest.TestCase):
+    def test_seal_detects_modified_added_and_retargeted_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 't3').write_text('immutable binary')
+            (root / 'current').symlink_to('t3')
+            host.atomic_json(root / 'MAINTENANCE_MANIFEST.json', host.artifact_manifest(root))
+            self.assertTrue(host.artifact_valid(root))
+            (root / 't3').write_text('modified')
+            self.assertFalse(host.artifact_valid(root))
 
 
 class LayoutTest(unittest.TestCase):

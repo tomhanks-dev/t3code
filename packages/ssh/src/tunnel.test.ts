@@ -6,6 +6,8 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
@@ -86,6 +88,31 @@ function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
 
 describe("ssh tunnel scripts", () => {
+  it.live(
+    "uses the explicitly managed fork and refuses official fallback when it is unavailable",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fork-runner-" });
+        yield* fs.makeDirectory(path.join(home, ".t3"));
+        const binary = path.join(home, "fork-t3");
+        yield* fs.writeFileString(binary, '#!/bin/sh\nprintf "fork:%s" "$1"\n');
+        yield* fs.chmod(binary, 0o700);
+        yield* fs.writeFileString(path.join(home, ".t3/fork-runner"), binary + "\n");
+        const runner = path.join(home, "runner.sh");
+        yield* fs.writeFileString(runner, SshTunnel.buildRemoteT3RunnerScript(ARCHIVE));
+        const command = ChildProcess.make("sh", [runner, "--version"], {
+          env: { HOME: home },
+          extendEnv: true,
+        });
+        assert.equal(yield* spawner.string(command), "fork:--version");
+        yield* fs.remove(binary);
+        assert.notEqual(Number(yield* spawner.exitCode(command)), 0);
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+  );
+
   it("rejects archive versions that are not a single exact version segment", () => {
     for (const archiveVersion of [
       "../other",

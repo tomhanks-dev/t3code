@@ -3,6 +3,7 @@
 import base64
 import datetime
 import json
+import hashlib
 import os
 from pathlib import Path
 import signal
@@ -96,13 +97,19 @@ def runtime(host):
     if host["platform"] == "linux":
         service_pid = int(run("systemctl", "--user", "show", host["service"], "--property=MainPID", "--value"))
         if service_pid == 0:
+            bootstrap = host.get('bootstrap', {})
+            if pid in rows and Path(f'/proc/{pid}/exe').resolve() == Path(bootstrap.get('executable', '/nonexistent')):
+                listener = run('ss', '-H', '-ltnp', 'sport', '=', ':3773')
+                if f'pid={pid},' not in listener or str(Path(f'/proc/{pid}/cwd').resolve()) != bootstrap['cwd']:
+                    raise RuntimeError('Initial server listener/cwd does not match the pinned bootstrap')
+                return pid, pid, rows
             return None, None, rows
         expected = (Path(host["install_root"]) / "current/t3").resolve()
         actual = Path(f"/proc/{service_pid}/exe").resolve()
         if service_pid != pid or actual != expected:
             raise RuntimeError("Service PID/runtime executable mismatch; refusing to operate")
         return service_pid, service_pid, rows
-    executable = host["app"] + "/Contents/MacOS/T3 Code (Beta)"
+    executable = mac_executable(host)
     matches = {p for p, (_, cmd) in rows.items() if cmd == executable}
     if not matches:
         return None, None, rows
@@ -114,14 +121,24 @@ def runtime(host):
     return pid, root, rows
 
 
+def mac_executable(host):
+    app = Path(host['app'])
+    if app.exists():
+        import plistlib
+        info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+        return str(app / 'Contents/MacOS' / info['CFBundleExecutable'])
+    return host.get('bootstrap', {}).get('executable', str(app / 'Contents/MacOS/T3 Code (Beta)'))
+
+
 def installed(host):
-    if host["platform"] == "linux":
-        path = Path(host["install_root"]) / "current/SOURCE_COMMIT"
-    else:
-        path = Path(host["app"]) / "Contents/Resources/SOURCE_COMMIT"
-        if not path.exists():
-            path = Path(host["installed_record"])
-    return path.read_text().strip()
+    path = (Path(host['install_root']) / 'current/SOURCE_COMMIT' if host['platform'] == 'linux'
+            else Path(host['app']) / 'Contents/Resources/SOURCE_COMMIT')
+    if path.is_file():
+        return path.read_text().strip()
+    bootstrap = host.get('bootstrap')
+    if not bootstrap:
+        raise RuntimeError('No verified installation or pinned bootstrap identity')
+    return bootstrap['installed']
 
 
 def target_path(host, commit):
@@ -130,11 +147,36 @@ def target_path(host, commit):
     return Path(host["stage_root"]) / commit / "T3 Code (Personal).app"
 
 
+def artifact_manifest(root):
+    root = Path(root)
+    result = {}
+    for path in sorted(root.rglob('*')):
+        if path.name == 'MAINTENANCE_MANIFEST.json':
+            continue
+        key = str(path.relative_to(root))
+        if path.is_symlink():
+            result[key] = {'link': os.readlink(path)}
+        elif path.is_file():
+            with path.open('rb') as stream:
+                result[key] = {'sha256': hashlib.file_digest(stream, 'sha256').hexdigest(), 'mode': path.stat().st_mode & 0o777}
+    return result
+
+
+def manifest_path(root):
+    root = Path(root)
+    return root.with_name(root.name + '.manifest.json') if root.suffix == '.app' else root / 'MAINTENANCE_MANIFEST.json'
+
+
+def artifact_valid(root):
+    path = manifest_path(root)
+    return path.is_file() and json.loads(path.read_text()) == artifact_manifest(root)
+
+
 def target_ready(host, commit):
     target = target_path(host, commit)
     marker = target / ("SOURCE_COMMIT" if host["platform"] == "linux" else "Contents/Resources/SOURCE_COMMIT")
     ready = target / ("READY" if host["platform"] == "linux" else "Contents/Resources/MAINTENANCE_READY")
-    return marker.exists() and marker.read_text().strip() == commit and ready.is_file()
+    return marker.exists() and marker.read_text().strip() == commit and ready.is_file() and artifact_valid(target)
 
 
 def probe(host, commit=None):
@@ -149,7 +191,9 @@ def probe(host, commit=None):
         with urllib.request.urlopen(host["health_url"], timeout=5) as response:
             if response.status != 200:
                 raise RuntimeError("Environment health check failed")
-            json.load(response)
+            health = json.load(response)
+            if health['environmentId'] != host['environment_id']:
+                raise RuntimeError('Connected to an unexpected environment')
     return {"id": host["id"], "installed": installed(host), "running": pid is not None,
             "pid": pid, "root_pid": root, "busy": busy,
             "target_ready": target_ready(host, commit) if commit else None}
@@ -162,17 +206,21 @@ def stop(host, expected):
     if not current["running"]:
         return
     if host["platform"] == "linux":
-        run("systemctl", "--user", "stop", host["service"])
+        service_pid = int(run('systemctl', '--user', 'show', host['service'], '--property=MainPID', '--value'))
+        if service_pid:
+            run('systemctl', '--user', 'stop', host['service'])
+        else:
+            os.kill(current['pid'], signal.SIGTERM)
     else:
         # Only the exact app parent captured and verified by runtime(), never a name-pattern kill.
         os.kill(current["root_pid"], signal.SIGTERM)
     deadline = time.monotonic() + 50
     while True:
         if host["platform"] == "linux":
-            remaining = int(run("systemctl", "--user", "show", host["service"], "--property=MainPID", "--value")) != 0
+            remaining = Path(f"/proc/{current['pid']}/exe").exists()
         else:
             rows = processes()
-            executable = host["app"] + "/Contents/MacOS/T3 Code (Beta)"
+            executable = mac_executable(host)
             remaining = any(rows.get(p, (None, None))[1] == executable for p in (current["pid"], current["root_pid"]))
         if not remaining:
             break
@@ -216,25 +264,47 @@ def activate(host, commit):
         next_path = current.with_name("current.maintenance-next")
         next_path.symlink_to(target)
         os.replace(next_path, current)
+        marker = Path(host['home']) / 'fork-runner'
+        temporary = marker.with_suffix('.next')
+        temporary.write_text(str(current / 't3') + '\n')
+        os.replace(temporary, marker)
     else:
         app = Path(host["app"])
+        app.parent.mkdir(parents=True, exist_ok=True)
         previous = Path(host["stage_root"]) / commit / "previous.app"
         if previous.exists():
             raise RuntimeError("Previous app backup already exists; inspect the prior cutover")
-        os.rename(app, previous)
+        if app.exists():
+            os.rename(app, previous)
+            os.rename(manifest_path(app), manifest_path(previous))
         os.rename(target, app)
+        os.rename(manifest_path(target), manifest_path(app))
+    atomic_json(Path(host['home']) / 'maintenance-activation.json', {'commit': commit, 'at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
 
 
 def start(host):
+    if installed(host) == host.get('bootstrap', {}).get('installed'):
+        bootstrap = host['bootstrap']
+        env = dict(os.environ, T3CODE_HOME=host['home'], T3CODE_NO_BROWSER='1')
+        with (Path(host['home']) / 'maintenance-bootstrap.log').open('ab') as log:
+            subprocess.Popen(bootstrap['launch'], cwd=bootstrap['cwd'], env=env,
+                             stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        return
     if host["platform"] == "linux":
         run("systemctl", "--user", "start", host["service"])
     else:
-        run("open", "-a", host["app"])
+        run('open', '-a', host['app'], '--env', 'T3CODE_HOME=' + host['home'], '--env', 'T3CODE_DISABLE_AUTO_UPDATE=true')
 
 
 def restore_before_start(host, attempted, previous):
     stopped_check(host)
     if host["platform"] == "linux":
+        if previous == host.get('bootstrap', {}).get('installed'):
+            current = Path(host['install_root']) / 'current'
+            if current.is_symlink():
+                current.unlink()
+            (Path(host['home']) / 'fork-runner').unlink(missing_ok=True)
+            return
         target = Path(host["install_root"]) / "releases" / previous
         if (target / "SOURCE_COMMIT").read_text().strip() != previous:
             raise RuntimeError("Original release identity cannot be verified")
@@ -252,8 +322,13 @@ def restore_before_start(host, attempted, previous):
             if original != previous:
                 raise RuntimeError("Original app identity cannot be verified")
             if app.exists():
-                os.rename(app, directory / "failed.app")
+                os.rename(app, directory / 'failed.app')
+                os.rename(manifest_path(app), manifest_path(directory / 'failed.app'))
             os.rename(backup, app)
+            os.rename(manifest_path(backup), manifest_path(app))
+        elif previous == host.get('bootstrap', {}).get('installed') and app.exists():
+            os.rename(app, directory / 'failed.app')
+            os.rename(manifest_path(app), manifest_path(directory / 'failed.app'))
     if installed(host) != previous:
         raise RuntimeError("Original installation was not restored")
 
@@ -264,7 +339,21 @@ def verify(host, commit):
     while time.monotonic() < deadline:
         try:
             value = probe(host)
-            if value["running"] and value["installed"] == commit:
+            if value['running'] and value['installed'] == commit:
+                activation = json.loads((Path(host['home']) / 'maintenance-activation.json').read_text())
+                metadata = json.loads((Path(host['home']) / 'userdata/server-runtime.json').read_text())
+                if activation['commit'] != commit or datetime.datetime.fromisoformat(metadata['startedAt'].replace('Z', '+00:00')) < datetime.datetime.fromisoformat(activation['at']):
+                    raise RuntimeError('Runtime predates activation')
+                if host['platform'] == 'linux':
+                    executable = Path(f"/proc/{value['pid']}/exe").resolve()
+                    if executable != Path(host['install_root']) / 'releases' / commit / 't3':
+                        raise RuntimeError('Running executable is not the requested immutable release')
+                root = (Path(host['install_root']) / 'releases' / commit if host['platform'] == 'linux' else Path(host['app']))
+                if not artifact_valid(root):
+                    raise RuntimeError('Installed artifact differs from its sealed manifest')
+                if host['platform'] == 'mac':
+                    run('codesign', '--verify', '--deep', '--strict', host['app'])
+                value['verified_source_commit'] = commit
                 return value
         except Exception as error:
             last = str(error)
@@ -357,10 +446,48 @@ def cleanup_workspace(host, worktree, canonical, branch, head, release):
     return {"outcome": "removed", "branch": branch, "worktree": str(path)}
 
 
+def prepare(host):
+    if host['platform'] != 'linux':
+        return {'id': host['id'], 'prepared': True}
+    unit = Path.home() / '.config/systemd/user' / host['service']
+    content = f"""[Unit]
+Description=Personal T3 fork (Mac maintenance owns updates)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={host['install_root']}/current/t3 serve --host 127.0.0.1 --port 3773 --base-dir {host['home']}
+WorkingDirectory={Path.home()}
+Environment=PATH={Path.home()}/.local/bin:{Path.home()}/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=T3CODE_NO_BROWSER=1
+Environment=TZ=Europe/Zurich
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target
+"""
+    if unit.exists() and unit.read_text() != content:
+        raise RuntimeError('Existing service differs; preserve and reconcile it')
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    unit.write_text(content)
+    run('systemctl', '--user', 'daemon-reload')
+    run('systemctl', '--user', 'enable', host['service'])
+    run('loginctl', 'enable-linger', str(os.getuid()))
+    if run('loginctl', 'show-user', str(os.getuid()), '--property=Linger', '--value') != 'yes':
+        raise RuntimeError('User service cannot survive logout; lingering is required')
+    return {'id': host['id'], 'prepared': True, 'service': str(unit)}
+
+
 def main():
+    if sys.argv[1] == 'seal':
+        root = Path(sys.argv[2])
+        atomic_json(manifest_path(root), artifact_manifest(root))
+        return
     operation, encoded, *args = sys.argv[1:]
     host = json.loads(base64.urlsafe_b64decode(encoded))
-    functions = {"probe": probe, "stop": stop, "backup": backup, "activate": activate,
+    functions = {"prepare": prepare, "probe": probe, "stop": stop, "backup": backup, "activate": activate,
                  "start": start, "verify": verify, "stopped-check": stopped_check,
                  "restore-before-start": restore_before_start, "workspace-probe": workspace_probe, "workspace-cleanup": cleanup_workspace}
     result = functions[operation](host, *args)

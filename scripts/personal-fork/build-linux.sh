@@ -55,4 +55,5 @@ tar xzf "$archive" -C "$release" --strip-components=1
 test -x "$release/t3"
 printf '%s\n' "$commit" > "$release/SOURCE_COMMIT"
 touch "$release/READY"
+python3 "$build/scripts/personal-fork/host.py" seal "$release"
 git show "$commit:pnpm-lock.yaml" > pnpm-lock.yaml

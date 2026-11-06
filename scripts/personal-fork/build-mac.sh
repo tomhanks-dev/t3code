@@ -3,7 +3,7 @@ set -euo pipefail
 project_dir="$1"; repo="$2"; commit="$3"; destination="$4"; settings="$5"; hosts="$6"
 mkdir -p "$project_dir/tooling"
 node_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["engines"]["node"])' "$repo/package.json")"
-export PATH="$project_dir/tooling/node-v$node_version-darwin-arm64/bin:$HOME/.local/share/vite-plus/bin:$HOME/.cargo/bin:$PATH"
+export PATH="$project_dir/tooling/node-v$node_version-darwin-arm64/bin:$HOME/.local/share/vite-plus/bin:$HOME/.cargo/bin:$repo/node_modules/.bin:$PATH"
 if ! test -x "$project_dir/tooling/node-v$node_version-darwin-arm64/bin/node"; then
   cd "$project_dir/tooling"
   curl -fsSLO "https://nodejs.org/dist/v$node_version/node-v$node_version-darwin-arm64.tar.gz"
@@ -14,9 +14,11 @@ fi
 test "$(node --version)" = "v$node_version"
 identity="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signing_identity"])' "$settings")"
 test -n "$identity"
-security find-identity -v -p codesigning | /usr/bin/grep -F "$identity" >/dev/null
+if test "$identity" != "-"; then
+  security find-identity -v -p codesigning | /usr/bin/grep -F "$identity" >/dev/null
+fi
 cd "$repo"
-version="$(node -p "require('./apps/server/package.json').version.split('-')[0]")-preview.$(date +%Y%m%d).$(date +%s)"
+version="$(node -p "require('./apps/server/package.json').version.split('-')[0]")-preview.$(git show -s --format=%cd --date=format:%Y%m%d "$commit").$(git show -s --format=%ct "$commit")"
 vp install --frozen-lockfile
 node scripts/build-desktop-artifact.ts --platform mac --target dir --arch arm64 --build-version "$version" --output-dir "$destination/build"
 app="$destination/T3 Code (Personal).app"
@@ -39,4 +41,5 @@ path.write_bytes(plistlib.dumps(value))
 PY
 codesign --force --deep --timestamp=none --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
+python3 "$repo/scripts/personal-fork/host.py" seal "$app"
 git show "$commit:pnpm-lock.yaml" > pnpm-lock.yaml

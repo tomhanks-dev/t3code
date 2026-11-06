@@ -55,14 +55,14 @@ after the explicit release procedure's gates pass.
 
 When blocked, preserve the candidate and record its path, pinned refs, relevant
 source evidence, choices, recommendation and check results in canonical
-`.t3-fork/state/decisions.md`. Scheduled inspections never merge or publish;
+`.t3-fork/state/decisions.md`. The authorized daily Mac integration runs the release procedure;
 an interactive session may ask its user directly. Mechanical failures such as
 the old nested CLI's read-only Git metadata are repair work, not product
 decisions. Work directly in the authorized T3 turn instead of recreating that
 nested launcher.
 
 Upstream integration normally runs inside an explicitly requested
-[t3-fork-release](../t3-fork-release/SKILL.md) batch. A scheduled inspection only
-fetches and reports updates; it cannot publish, stage or restart. A standalone
+[t3-fork-release](../t3-fork-release/SKILL.md) batch. The daily Mac task may publish and stage only after all release gates pass;
+the independent deployment worker owns restarts. A standalone
 analysis or upstream preparation leaves its candidate unpublished unless the user
 explicitly requests a release. Keep integration success distinct from deployment.

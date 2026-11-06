@@ -20,6 +20,8 @@ Missing configuration blocks release operations; examples are not a usable cohor
   paths. An unreachable host remains required; removal needs the maintainer's decision.
 - `settings.json` contains signing identity, bundle ID and launchd label. Keep
   credentials in existing subscription, SSH and Keychain authentication systems.
+  Signing identity `-` selects ad hoc signing for local personal builds; distribution
+  to other users requires an appropriate signing identity.
 - `state/` holds observed revisions, pending decisions, task/thread IDs, release
   manifests and recovery journals. Preserve it when relocating an installation.
   Accepted personal behavior belongs in tracked `FORK.md`, not this local queue.
@@ -110,16 +112,19 @@ backups are outside feature-worktree cleanup.
 `./update-personal.sh` remains a low-level way to stage already-published dev;
 it does not gather features or merge upstream. Prefer the release skill.
 
-## Daily upstream inspection — 21:00 Europe/Zurich
+## Daily upstream integration — 21:00 Europe/Zurich
 
-The daily task only fetches `origin dev` and `upstream main`, records exact
-refs and a concise summary in canonical `state/last-inspection.md`, and preserves
-all feature/release state. It does not merge, commit, push, build, stage, clean up
-or restart hosts. Acquire the integration lock for the shared report write. No
-daily notifications or new review threads. The weekly decision review remains.
+The Mac maintenance task is authorized to execute the release procedure above:
+freeze ready features and upstream, ordinary-merge in an isolated candidate,
+review every `FORK.md` customization, run focused checks and `check:changed`,
+verify, publish normally, build both required hosts and queue idle deployment.
+A conflict or failed check preserves the candidate and prevents publication.
+An incomplete deployment journal blocks another release. Record actual results
+in the bound maintenance thread and the durable release report.
 
-Schedules are bound to the root maintenance thread. T3 must be running and the
-Mac awake; fixed-time occurrences more than ten minutes late are skipped.
+Schedules use the T3 server's local timezone, which must be Europe/Zurich.
+T3 must be running and the Mac awake; fixed-time occurrences more than ten
+minutes late are skipped. Keep the old worker-side task paused.
 
 ## Weekly decisions — Sunday 21:00 Europe/Zurich
 
@@ -171,3 +176,23 @@ rollback. Preserve backups; clear the journal only after verified recovery.
 The old Ubuntu `t3code-upstream-sync.timer` is disabled and superseded.
 `scripts/personal-sync.sh` refuses its obsolete nested-agent flow. Preserve the
 old remote candidate/report until the daily flow accounts for their work.
+
+## First installation on Kreditanstalt and worker1337
+
+The local inventory pins each existing installation separately under `bootstrap`.
+The initial cohort may differ only while every host matches those pins. The Mac
+keeps its existing T3 home; worker1337 keeps `/home/tombanks/.t3`. Maintenance does
+not create an active data copy. Before preparing an inactive Linux user service,
+record the inventory and preparation phase in the local bootstrap journal. The
+unit runs the fork's immutable `current/t3` and never an official runtime directory.
+Preparation does not stop or start a server. Activation writes the remote
+`~/.t3/fork-runner` pointer; the fork desktop's SSH runner uses it for all commands.
+The existing official version directory remains untouched.
+
+The first Mac installation preserves the development Electron app and its saved
+launch command. Before any new runtime starts, failed activation can restore the
+old pointer or resume that development launch. After a new runtime starts,
+recovery requires inspecting the journal and migration compatibility. Artifact
+manifests seal file contents, modes and symlinks. Verification checks environment
+identity, an activation newer than the old runtime, the actual Linux process's
+immutable executable path, the manifest, and the Mac code signature.

@@ -419,6 +419,14 @@ ensure_remote_node_path() {
 
 const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
+if [ -f "$HOME/.t3/fork-runner" ]; then
+  IFS= read -r T3_FORK_RUNNER < "$HOME/.t3/fork-runner"
+  if [ ! -x "$T3_FORK_RUNNER" ]; then
+    printf 'Configured fork runtime is unavailable; maintenance must restore it.\\n' >&2
+    exit 1
+  fi
+  exec "$T3_FORK_RUNNER" "$@"
+fi
 @@T3_NODE_ENV_SCRIPT@@
 T3_NODE_SCRIPT_PATH=@@T3_NODE_SCRIPT_PATH@@
 if [ -n "$T3_NODE_SCRIPT_PATH" ]; then

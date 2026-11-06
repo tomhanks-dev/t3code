@@ -38,6 +38,8 @@ def inventory():
     hosts = config["hosts"]
     if len({h["id"] for h in hosts}) != len(hosts) or len([h for h in hosts if h["transport"] == "local"]) != 1:
         raise RuntimeError("Inventory must have unique host IDs and exactly one local Mac")
+    if not any(h['transport'] == 'ssh' for h in hosts):
+        raise RuntimeError('Both the Mac coordinator and a remote deployment host are required')
     for h in hosts:
         if h["transport"] == "local" and (h["platform"], h["arch"]) != ("mac", "arm64"):
             raise RuntimeError("Local builder currently supports Mac ARM64 only")
@@ -161,9 +163,12 @@ def deploy():
             raise RuntimeError("Inventory changed after staging; rebuild the complete cohort")
         observed = [host_call(h, "probe", commit) for h in config["hosts"]]
         if all(p["installed"] == commit for p in observed):
+            verified = [host_call(h, 'verify', commit) for h in config['hosts']]
+            atomic_json(STATE / 'last-deployment.json', {'commit': commit, 'phase': 'complete', 'completed_at': now(), 'hosts': {h['id']: {'verified': value} for h, value in zip(config['hosts'], verified)}})
             pending.unlink()
             return
-        if len({p["installed"] for p in observed}) != 1:
+        bootstrap = all(p["installed"] == h.get("bootstrap", {}).get("installed") for h, p in zip(config["hosts"], observed))
+        if len({p["installed"] for p in observed}) != 1 and not bootstrap:
             raise RuntimeError("Installed cohort is already split; reconcile it before deployment")
         if any(p["busy"] or not p["target_ready"] for p in observed):
             (STATE / "idle-observation.json").unlink(missing_ok=True)
