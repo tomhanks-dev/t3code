@@ -42,6 +42,7 @@ export class TextGeneration extends Context.Service<TextGeneration, ProviderText
 ) {}
 
 type TextGenerationOp =
+  | "generatePromptSuggestion"
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
@@ -132,6 +133,16 @@ export const make = Effect.gen(function* () {
     );
   });
   return TextGeneration.of({
+    generatePromptSuggestion: Effect.fn("TextGeneration.generatePromptSuggestion")(
+      function (input) {
+        return generate(
+          "generatePromptSuggestion",
+          input.modelSelection,
+          (service, modelSelection) =>
+            service.generatePromptSuggestion({ ...input, modelSelection }),
+        );
+      },
+    ),
     generateCommitMessage: Effect.fn("TextGeneration.generateCommitMessage")(function (input) {
       return generate("generateCommitMessage", input.modelSelection, (service, modelSelection) =>
         service.generateCommitMessage({ ...input, modelSelection }),

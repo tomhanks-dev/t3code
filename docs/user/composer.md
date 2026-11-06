@@ -12,6 +12,18 @@ becomes an attachment when inserting it would exceed the message limit. On a
 hardware keyboard, use `Cmd+Shift+V` on Apple devices or `Ctrl+Shift+V` elsewhere
 to keep a large paste editable in the composer instead.
 
+## Next prompt suggestions
+
+After a response, T3 Code can suggest a short follow-up that helps finish your
+current task. It uses the environment's text-generation model and recent conversation,
+so suggestions consume that provider's usage. Completed tasks or questions requiring
+information from you may have no suggestion.
+
+On web and desktop, press **Tab** in an empty composer to insert the suggestion,
+then use your usual send shortcut. On mobile, tap it to insert it. You can edit
+it before sending, dismiss it, or type your own message. Suggestions never send
+automatically and do not replace permission requests.
+
 ## Formatting
 
 The composer writes Markdown and shows it styled as you type. When your cursor

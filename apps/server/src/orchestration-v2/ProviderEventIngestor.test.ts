@@ -258,6 +258,7 @@ it.effect("refreshes the failing instance snapshot after a committed usage_limit
           generatePrContent: () => Effect.die("unused"),
           generateThreadTitle: () => Effect.die("unused"),
           generateReviewGuide: () => Effect.die("unused"),
+          generatePromptSuggestion: () => Effect.succeed({ suggestion: "Continue." }),
           generateTranscriptionPostProcessing: () => Effect.die("unused"),
         },
         snapshot: {

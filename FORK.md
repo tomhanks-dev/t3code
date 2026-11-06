@@ -145,6 +145,30 @@ tint in `widgets/AgentActivity.tsx`. Guest identity colors remain separate from
 pending request status. Verify with `vp run check:changed` and light/dark client
 captures of an input request beside its project summary; this is a visual change.
 
+Idle sessions offer an AI-generated next prompt focused on continuing and finishing
+the user's existing task. Web/desktop and embedded side chats accept it with plain
+Tab into an empty draft; sending still uses the existing shortcut. Mobile taps to
+insert. Escape/dismiss and normal drafting leave the user in control. Pending
+permissions, questions, plans, running work and queued edits keep their existing
+controls. Generation uses the environment/project text-generation model, an isolated
+working directory and bounded conversation context. A per-turn server cache shares
+concurrent requests; shell checks before/after generation discard stale responses.
+There is no persistence migration or automatic message/approval submission.
+
+Owning paths are server `textGeneration/PromptSuggestions.ts`, provider-core
+`textGenerationPrompts.ts`/`textGenerationOperations.ts`, the prompt-suggestion RPC
+contract/permission mapping, web `chat/usePromptSuggestion.ts`/`ChatComposer.tsx`,
+and mobile `state/use-prompt-suggestion.ts`/`ThreadComposer.tsx`. Preserve the
+new operation in provider wrappers; providers without application text generation
+remain unsupported. Old servers simply leave suggestions absent for newer clients.
+MCP and scheduled work can use the service, but do not generate unsolicited turns.
+Verify context, shared generation, stale/pending suppression and destination grants:
+
+```sh
+vp test run apps/server/src/textGeneration/PromptSuggestions.test.ts packages/client-runtime/src/state/commandPermissions.test.ts
+cd evals && vp run prompt-suggestions --model <model> --out /tmp/suggestion-eval
+```
+
 The fork also maintains project-local skills and coordinated deployment tooling
 under `scripts/personal-fork/`.
 

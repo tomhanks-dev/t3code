@@ -27,6 +27,7 @@ import {
   TranscriptionPostProcessingOutput,
 } from "@t3tools/provider-core/server/textGenerationOperations";
 import {
+  buildPromptSuggestionPrompt,
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
@@ -362,6 +363,17 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = () =>
     Effect.fail(investigationUnsupported("generateReviewGuide", "Muse Code"));
   return {
+    generatePromptSuggestion: Effect.fn("MuseTextGeneration.generatePromptSuggestion")(
+      function* (input) {
+        const result = yield* runMuseJson({
+          operation: "generatePromptSuggestion",
+          ...buildPromptSuggestionPrompt(input.context),
+          modelSelection: input.modelSelection,
+        });
+        const suggestion = result.suggestion.trim();
+        return { suggestion: result.canContinue && suggestion.length <= 240 ? suggestion : "" };
+      },
+    ),
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

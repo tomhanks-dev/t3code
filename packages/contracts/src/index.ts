@@ -75,3 +75,4 @@ export * from "./settingsSecretValue.ts";
 export * from "./clientRpcPermissions.ts";
 
 export * from "./sidebarProfiles.ts";
+export * from "./promptSuggestion.ts";

@@ -1,3 +1,4 @@
+import { usePromptSuggestion } from "./usePromptSuggestion";
 import { VoiceInputSetup } from "./VoiceInputSetup";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
@@ -2322,8 +2323,57 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     !pendingDraftWork.has(attachmentTargetKey) &&
     countPreparingComposerImages(attachmentTargetKey) === 0;
 
-  const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) =>
-    composerCommandKeyHandler({
+  const completedSuggestionRun =
+    phase !== "running" &&
+    !isSendBusy &&
+    !isCompacting &&
+    !isEditingQueuedMessage &&
+    !activePendingApproval &&
+    pendingUserInputs.length === 0 &&
+    !showPlanFollowUpPrompt &&
+    !environmentUnavailable &&
+    !noProviderAvailable &&
+    activeThread?.latestRun?.status === "completed"
+      ? activeThread.latestRun.runId
+      : null;
+  const nextPromptSuggestion = usePromptSuggestion(
+    environmentId,
+    activeThreadId,
+    completedSuggestionRun,
+  );
+  const [dismissedSuggestion, setDismissedSuggestion] = useState<string | null>(null);
+  const suggestionKey = `${environmentId}:${activeThreadId}:${completedSuggestionRun}`;
+  const visiblePromptSuggestion =
+    !composerDraftHasUserContent(composerDraft) && dismissedSuggestion !== suggestionKey
+      ? nextPromptSuggestion
+      : "";
+  const acceptPromptSuggestion = () => {
+    if (!visiblePromptSuggestion || promptRef.current.length > 0) return;
+    applyPromptReplacement(0, 0, visiblePromptSuggestion);
+    setDismissedSuggestion(suggestionKey);
+    scheduleComposerFocus();
+  };
+  const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) => {
+    if (
+      visiblePromptSuggestion &&
+      !event.isComposing &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      if (key === "Tab") {
+        event.preventDefault();
+        acceptPromptSuggestion();
+        return true;
+      }
+      if (key === "Escape") {
+        event.preventDefault();
+        setDismissedSuggestion(suggestionKey);
+        return true;
+      }
+    }
+    return composerCommandKeyHandler({
       keybindings,
       sendShortcut: settings.sendShortcut,
       routeKind,
@@ -2363,6 +2413,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       applyPromptReplacement,
       submitComposer,
     })(key, event, isTaskItem);
+  };
 
   const {
     stashQueue,
@@ -3493,6 +3544,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   />
                 )}
 
+              {visiblePromptSuggestion && (
+                <div className="flex items-center gap-2 px-1 pb-2 text-sm">
+                  <button
+                    type="button"
+                    className="min-w-0 truncate text-left text-muted-foreground hover:text-foreground"
+                    onClick={acceptPromptSuggestion}
+                  >
+                    {visiblePromptSuggestion}
+                  </button>
+                  <span className="shrink-0 text-xs text-muted-foreground">Tab to insert</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss prompt suggestion"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => setDismissedSuggestion(suggestionKey)}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               {composerAttachmentMediaRow}
 
               {composerAttachmentFileList}

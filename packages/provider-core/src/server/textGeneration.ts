@@ -107,7 +107,17 @@ export interface TranscriptionPostProcessingResult {
   transcription: string;
 }
 
+export interface PromptSuggestionGenerationInput {
+  cwd: string;
+  context: string;
+  modelSelection: ModelSelection;
+}
+
 export interface ProviderTextGeneration {
+  readonly generatePromptSuggestion: (
+    input: PromptSuggestionGenerationInput,
+  ) => Effect.Effect<{ readonly suggestion: string }, TextGenerationError>;
+
   readonly generateTranscriptionPostProcessing: (
     input: TranscriptionPostProcessingInput,
   ) => Effect.Effect<TranscriptionPostProcessingResult, TextGenerationError>;

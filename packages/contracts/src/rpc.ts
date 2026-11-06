@@ -1,4 +1,9 @@
 import {
+  PromptSuggestionInput,
+  PromptSuggestionResult,
+  PromptSuggestionError,
+} from "./promptSuggestion.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -422,6 +427,7 @@ export const WS_METHODS = {
 
   filesystemBrowse: "filesystem.browse",
   filesystemGetMetadata: "filesystem.getMetadata",
+  promptSuggestionGenerate: "promptSuggestion.generate",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
   assetsCreateUrl: "assets.createUrl",
@@ -1377,6 +1383,12 @@ const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   error: Schema.Union([FilesystemBrowseError, EnvironmentAuthorizationError]),
 });
 
+const WsPromptSuggestionGenerateRpc = Rpc.make(WS_METHODS.promptSuggestionGenerate, {
+  payload: PromptSuggestionInput,
+  success: PromptSuggestionResult,
+  error: Schema.Union([PromptSuggestionError, EnvironmentAuthorizationError]),
+});
+
 const WsAgentSessionsScanRpc = Rpc.make(WS_METHODS.agentSessionsScan, {
   payload: AgentSessionScanInput,
   success: AgentSessionScanResult,
@@ -2128,6 +2140,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsFilesystemGetMetadataRpc,
+  WsPromptSuggestionGenerateRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,
   WsAssetsCreateUrlRpc,

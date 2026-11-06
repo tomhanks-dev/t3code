@@ -1,3 +1,4 @@
+import * as PromptSuggestions from "./textGeneration/PromptSuggestions.ts";
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -1473,6 +1474,7 @@ export const layerWsRpc = (
       const repositoryIdentityResolver =
         yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
       const projectEnrichment = yield* ProjectEnrichmentService.ProjectEnrichmentService;
+      const promptSuggestions = yield* PromptSuggestions.PromptSuggestions;
       const agentSessionScanner = yield* AgentSessionScanner.AgentSessionScanner;
       const agentSessionImporter = yield* AgentSessionImporter.AgentSessionImporter;
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
@@ -3025,6 +3027,7 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.attachmentsCreateUploadUrl]: (input) => issueAttachmentUploadUrl(input),
         [WS_METHODS.attachmentsDelete]: (input) => deletePendingAttachment(input.attachmentId),
+        [WS_METHODS.promptSuggestionGenerate]: (input) => promptSuggestions.generate(input),
         [WS_METHODS.agentSessionsScan]: () => agentSessionScanner.scan,
         [WS_METHODS.agentSessionsImport]: (input) =>
           agentSessionImporter.importRecentAgentThreads(input),

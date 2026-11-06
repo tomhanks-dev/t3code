@@ -1,3 +1,4 @@
+import { usePromptSuggestion } from "../../state/use-prompt-suggestion";
 import { useSidebarWorkspaceTabs } from "../layout/workspace/useSystemWorkspaceTabBar";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
@@ -33,7 +34,7 @@ import {
 import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
-import { I18nManager, Keyboard, Platform, View, type ViewStyle } from "react-native";
+import { I18nManager, Keyboard, Platform, Pressable, View, type ViewStyle } from "react-native";
 import { composerImageGallery } from "../../lib/composerImageGallery";
 import { filePreviewGallery } from "../../lib/filePreviewGallery";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/FilePreviewModal";
@@ -612,6 +613,33 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     props.sendBlockedReason ??
     (pendingPastedTextAttachmentCount > 0 ? "Attaching pasted text" : null) ??
     attachmentBlockReason;
+  const completedSuggestionRun =
+    !props.isDraft &&
+    !props.hidden &&
+    !props.activeThreadBusy &&
+    !props.interactionLocked &&
+    !props.queuedEdit &&
+    props.queueCount === 0 &&
+    props.connectionState === "connected" &&
+    !props.selectedThread.hasPendingApprovals &&
+    !props.selectedThread.hasPendingUserInput &&
+    !props.selectedThread.hasActionableProposedPlan &&
+    props.selectedThread.latestRun?.status === "completed"
+      ? props.selectedThread.latestRun.runId
+      : null;
+  const nextPromptSuggestion = usePromptSuggestion(
+    props.environmentId,
+    props.selectedThread.id,
+    completedSuggestionRun,
+  );
+  const suggestionKey = `${composerOwnerKey}:${completedSuggestionRun}`;
+  const [dismissedSuggestion, setDismissedSuggestion] = useState<string | null>(null);
+  const visiblePromptSuggestion =
+    draftMessage.length === 0 &&
+    draftAttachments.length === 0 &&
+    dismissedSuggestion !== suggestionKey
+      ? nextPromptSuggestion
+      : "";
   const canSend =
     (props.canOperateThread || props.connectionState !== "connected") &&
     hasContent &&
@@ -837,6 +865,30 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
         className="relative w-full self-center"
         style={{ maxWidth: props.contentMaxWidth }}
       >
+        {visiblePromptSuggestion ? (
+          <View className="flex-row items-center gap-2 pb-2">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Insert suggestion: ${visiblePromptSuggestion}`}
+              className="flex-1 p-2"
+              onPress={() => {
+                onChangeDraftMessage(visiblePromptSuggestion);
+                setDismissedSuggestion(suggestionKey);
+                inputRef.current?.focus();
+              }}
+            >
+              <Text className="text-sm text-muted-foreground">{visiblePromptSuggestion}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss prompt suggestion"
+              className="p-2"
+              onPress={() => setDismissedSuggestion(suggestionKey)}
+            >
+              <Text className="text-muted-foreground">×</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {props.draftControls}
         {!isSubmissionLocked &&
         composerMenu.trigger &&

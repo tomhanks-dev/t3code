@@ -7,6 +7,7 @@ import { extractJsonObject } from "@t3tools/shared/schemaJson";
 
 import type { ProviderTextGeneration } from "./textGeneration.ts";
 import {
+  buildPromptSuggestionPrompt,
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
@@ -181,6 +182,16 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
   });
 
   return {
+    generatePromptSuggestion: Effect.fn(`${name}.generatePromptSuggestion`)(function* (input) {
+      const result = yield* run({
+        operation: "generatePromptSuggestion",
+        cwd: input.cwd,
+        modelSelection: input.modelSelection,
+        ...buildPromptSuggestionPrompt(input.context),
+      });
+      const suggestion = result.suggestion.trim();
+      return { suggestion: result.canContinue && suggestion.length <= 240 ? suggestion : "" };
+    }),
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
