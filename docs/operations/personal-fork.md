@@ -155,7 +155,9 @@ it invokes `deploy` every five minutes while the Mac is awake and logged in.
 The worker validates the cohort fingerprint and staged artifacts; checks runs,
 turns, effects, requests, imminent schedules and subprocesses; and requires two
 idle observations at least a minute apart. Open terminal shells, resident
-providers and unknown processes can postpone deployment. Do not terminate them
+providers and unknown processes can postpone deployment. Inventory
+`infrastructure_commands` may identify known persistent MCP transports with exact
+executable paths and argument prefixes; generic Node or shell exemptions are unsafe. Do not terminate them
 to clear the guard.
 
 It journals BEFORE live changes, stops all hosts, rechecks persistent queues,
@@ -185,7 +187,8 @@ keeps its existing T3 home; worker1337 keeps `/home/tombanks/.t3`. Maintenance d
 not create an active data copy. Before preparing an inactive Linux user service,
 record the inventory and preparation phase in the local bootstrap journal. The
 unit runs the fork's immutable `current/t3` and never an official runtime directory.
-Preparation does not stop or start a server. Activation writes the remote
+Run `python3 scripts/personal-fork/manage.py prepare` to journal and prepare
+the inactive service. Preparation does not stop or start a server. Activation writes the remote
 `~/.t3/fork-runner` pointer; the fork desktop's SSH runner uses it for all commands.
 The existing official version directory remains untouched.
 

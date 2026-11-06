@@ -192,6 +192,16 @@ class DatabaseGuardTest(unittest.TestCase):
             self.assertEqual(database.read_bytes(), before)
 
 
+class InfrastructureTest(unittest.TestCase):
+    def test_configured_mcp_script_is_allowed_but_other_node_work_still_blocks(self):
+        value = {'infrastructure_commands': [{'executable': '/opt/node', 'arguments': ['/tools/mcp.js']}]}
+        with patch.object(host.sys, 'platform', 'darwin'), patch.object(host, 'run', return_value='/opt/node /tools/mcp.js'):
+            self.assertTrue(host.infrastructure(value, 100, '/opt/node'))
+        with patch.object(host.sys, 'platform', 'darwin'), patch.object(host, 'run', return_value='/opt/node /projects/dev-server.js'):
+            self.assertFalse(host.infrastructure(value, 100, '/opt/node'))
+        self.assertFalse(host.infrastructure(value, 100, '/bin/zsh'))
+
+
 class BootstrapHostTest(unittest.TestCase):
     def test_initial_mac_activation_and_prestart_restore_preserve_the_dev_app(self):
         with tempfile.TemporaryDirectory() as directory:

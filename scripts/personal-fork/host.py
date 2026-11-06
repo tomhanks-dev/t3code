@@ -73,6 +73,16 @@ def descendants(rows, pid):
 
 def infrastructure(host, pid, command):
     path = Path(command)
+    for rule in host.get('infrastructure_commands', []):
+        if command != rule['executable']:
+            continue
+        expected = rule.get('arguments', [])
+        if expected:
+            args = (Path(f'/proc/{pid}/cmdline').read_bytes().decode().split('\0')
+                    if sys.platform.startswith('linux') else shlex.split(run('ps', '-p', str(pid), '-o', 'args=')))
+            if args[1:1 + len(expected)] != expected:
+                continue
+        return True
     if path.name == "t3-resource-monitor":
         return True
     if path.name == "codex":

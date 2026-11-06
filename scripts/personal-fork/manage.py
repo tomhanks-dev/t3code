@@ -89,6 +89,20 @@ def status():
     return result
 
 
+def prepare():
+    with locked('release'):
+        config = inventory()
+        observed = [host_call(h, 'probe') for h in config['hosts']]
+        journal = {'phase': 'preparing', 'at': now(), 'inventory_sha256': fingerprint(config), 'before': observed, 'hosts': {}}
+        atomic_json(STATE / 'bootstrap.json', journal)
+        for h in config['hosts']:
+            journal['hosts'][h['id']] = host_call(h, 'prepare')
+            atomic_json(STATE / 'bootstrap.json', journal)
+        journal['phase'] = 'prepared'
+        atomic_json(STATE / 'bootstrap.json', journal)
+        return journal
+
+
 def pending_release(commit):
     if (STATE / "deployment.json").exists():
         raise RuntimeError("Resolve the previous deployment journal before staging")
@@ -244,11 +258,13 @@ def deploy():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "stage", "deploy", "lock-run", "paths"])
+    parser.add_argument("command", choices=["status", "stage", "deploy", "lock-run", "paths", "prepare"])
     parser.add_argument("commit", nargs="?")
     args = parser.parse_args()
     if args.command == "paths":
         print(json.dumps({"repository": str(ROOT), "local": str(LOCAL), "state": str(STATE)}, indent=2))
+    elif args.command == "prepare":
+        print(json.dumps(prepare(), indent=2))
     elif args.command == "status":
         status()
     elif args.command == "stage":
