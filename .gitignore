@@ -48,3 +48,7 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+
+# Installation configuration, release state and generated artifacts.
+/.t3-fork/
+__pycache__/

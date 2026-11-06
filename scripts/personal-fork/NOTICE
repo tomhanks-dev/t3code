@@ -1,0 +1,9 @@
+Adapted from ralfboltshauser/t3code, commit
+32f97584a7262856e18b7b0de4de49525bd88ece, scripts/personal-fork and the
+t3-fork-* / t3-personal-fork repository skills. Source:
+https://github.com/ralfboltshauser/t3code/tree/32f97584a7262856e18b7b0de4de49525bd88ece
+
+Distributed under this repository's MIT license (see LICENSE).
+
+This import is a draft. Host configuration and initial installation migration
+must be completed and verified before it can deploy either installation.
