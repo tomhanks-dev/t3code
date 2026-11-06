@@ -11,6 +11,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderThreadId,
+  type RuntimeMode,
   ProviderTurnId,
   RunAttemptId,
   RunId,
@@ -818,7 +819,7 @@ const writeImportedHistory = (threadId: ThreadId, text: string) =>
     });
   });
 
-const createParent = (threadId: ThreadId) =>
+const createParent = (threadId: ThreadId, runtimeMode: RuntimeMode = "full-access") =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;
     yield* orchestrator.dispatch({
@@ -828,7 +829,7 @@ const createParent = (threadId: ThreadId) =>
       projectId: ProjectId.make("side-chat-project"),
       title: "Side chat parent",
       modelSelection: forkCases[0]!.modelSelection,
-      runtimeMode: "full-access",
+      runtimeMode,
       interactionMode: "default",
       branch: null,
       worktreePath: null,
@@ -928,80 +929,81 @@ it.effect("resolves an explicit checkpoint fork to its source run", () =>
   }).pipe(Effect.provide(forkCases[0]!.layer)),
 );
 
-it.effect("a side chat of an idle parent still starts with the framing note", () =>
-  Effect.gen(function* () {
-    const orchestrator = yield* Orchestrator.OrchestratorV2;
-    const parentId = ThreadId.make("side-chat-idle-parent");
-    const sideChatId = ThreadId.make("side-chat-idle-child");
-    yield* createParent(parentId);
-    yield* writeParentRun({
-      threadId: parentId,
-      runId: RunId.make("side-chat-idle-parent-run"),
-      ordinal: 1,
-      status: "completed",
-      text: "Parent work",
-      stable: true,
-    });
+it.effect.each(["full-access", "approval-required"] as const)(
+  "a side chat of an idle parent inherits %s and starts with the framing note",
+  (runtimeMode) =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const parentId = ThreadId.make("side-chat-idle-parent");
+      const sideChatId = ThreadId.make("side-chat-idle-child");
+      yield* createParent(parentId, runtimeMode);
+      yield* writeParentRun({
+        threadId: parentId,
+        runId: RunId.make("side-chat-idle-parent-run"),
+        ordinal: 1,
+        status: "completed",
+        text: "Parent work",
+        stable: true,
+      });
 
-    const reads: Array<string> = [];
-    const recordReads: Statement.Transformer = (statement) => {
-      const [query] = statement.compile();
-      if (/^\s*SELECT/i.test(query)) reads.push(query);
-      return Effect.succeed(statement);
-    };
-    yield* forkSideChat("side-chat-idle-fork", parentId, sideChatId).pipe(
-      Effect.provideService(Statement.CurrentTransformer, recordReads),
-    );
-    assert.isEmpty(
-      reads.filter(
-        (query) =>
-          query.includes("FROM orchestration_v2_projection_checkpoints") ||
-          query.includes("FROM orchestration_v2_projection_context_transfers"),
-      ),
-    );
-    assert.equal(
-      (yield* orchestrator.getThreadProjection(sideChatId)).thread.runtimeMode,
-      "full-access",
-    );
-    yield* orchestrator.dispatch({
-      type: "thread.runtime-mode.set",
-      commandId: CommandId.make("side-chat-parent-mode-change"),
-      threadId: parentId,
-      runtimeMode: "approval-required",
-    });
-    assert.equal(
-      (yield* orchestrator.getThreadProjection(sideChatId)).thread.runtimeMode,
-      "full-access",
-    );
-    yield* orchestrator.dispatch({
-      type: "thread.runtime-mode.set",
-      commandId: CommandId.make("side-chat-child-mode-change"),
-      threadId: sideChatId,
-      runtimeMode: "auto",
-    });
-    yield* askSideChat(sideChatId, "side-chat-idle-first-message", {
-      ...forkCases[0]!.modelSelection,
-      model: "side-chat-model",
-    });
+      const reads: Array<string> = [];
+      const recordReads: Statement.Transformer = (statement) => {
+        const [query] = statement.compile();
+        if (/^\s*SELECT/i.test(query)) reads.push(query);
+        return Effect.succeed(statement);
+      };
+      yield* forkSideChat("side-chat-idle-fork", parentId, sideChatId).pipe(
+        Effect.provideService(Statement.CurrentTransformer, recordReads),
+      );
+      assert.isEmpty(
+        reads.filter(
+          (query) =>
+            query.includes("FROM orchestration_v2_projection_checkpoints") ||
+            query.includes("FROM orchestration_v2_projection_context_transfers"),
+        ),
+      );
+      const created = yield* orchestrator.getThreadProjection(sideChatId);
+      assert.equal(created.thread.runtimeMode, runtimeMode);
+      const changedParentMode = runtimeMode === "full-access" ? "approval-required" : "full-access";
+      yield* orchestrator.dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("side-chat-parent-mode-change"),
+        threadId: parentId,
+        runtimeMode: changedParentMode,
+      });
+      assert.equal(
+        (yield* orchestrator.getThreadProjection(sideChatId)).thread.runtimeMode,
+        runtimeMode,
+      );
+      yield* orchestrator.dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("side-chat-child-mode-change"),
+        threadId: sideChatId,
+        runtimeMode: "auto",
+      });
+      yield* askSideChat(sideChatId, "side-chat-idle-first-message", {
+        ...forkCases[0]!.modelSelection,
+        model: "side-chat-model",
+      });
 
-    const started = yield* orchestrator.getThreadProjection(sideChatId);
-    assert.equal(started.thread.runtimeMode, "auto");
-    assert.equal(
-      (yield* orchestrator.getThreadProjection(parentId)).thread.runtimeMode,
-      "approval-required",
-    );
-    assert.isNotNull(started.providerThreads[0]?.forkedFrom);
-    // The side chat does not show the parent's run, so it is no baseline.
-    assert.isFalse(
-      started.turnItems.some((item) => item.type === "user_message" && item.modelSwitch),
-    );
-    assert.lengthOf(started.contextHandoffs, 1);
-    const [handoff] = started.contextHandoffs;
-    assert.isTrue(
-      handoff!.summaryText.startsWith("You are in a side chat beside the main thread."),
-    );
-    assert.notInclude(handoff!.summaryText, "Main thread activity");
-  }).pipe(Effect.provide(forkCases[0]!.layer)),
+      const started = yield* orchestrator.getThreadProjection(sideChatId);
+      assert.equal(started.thread.runtimeMode, "auto");
+      assert.equal(
+        (yield* orchestrator.getThreadProjection(parentId)).thread.runtimeMode,
+        changedParentMode,
+      );
+      assert.isNotNull(started.providerThreads[0]?.forkedFrom);
+      // The side chat does not show the parent's run, so it is no baseline.
+      assert.isFalse(
+        started.turnItems.some((item) => item.type === "user_message" && item.modelSwitch),
+      );
+      assert.lengthOf(started.contextHandoffs, 1);
+      const [handoff] = started.contextHandoffs;
+      assert.isTrue(
+        handoff!.summaryText.startsWith("You are in a side chat beside the main thread."),
+      );
+      assert.notInclude(handoff!.summaryText, "Main thread activity");
+    }).pipe(Effect.provide(forkCases[0]!.layer)),
 );
 
 it.effect("a side chat waits for the parent's new worktree, also after its setup ended", () =>

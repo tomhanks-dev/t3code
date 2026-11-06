@@ -56,14 +56,9 @@ export function useSideChat(input: {
         input: { threadId: targetThreadId, onlyIfUnused: true },
       });
     const targetRef = scopeThreadRef(threadRef.environmentId, targetThreadId);
-    if (!(await waitForThreadShell(targetRef))) {
-      input.onError("The side chat was created, but it did not reach this client.");
-      discard();
-      return false;
-    }
-    const sideChat = readThreadShell(targetRef);
+    const sideChat = (await waitForThreadShell(targetRef)) ? readThreadShell(targetRef) : null;
     if (sideChat === null) {
-      input.onError("The side chat is no longer available.");
+      input.onError("The side chat was created, but it did not reach this client.");
       discard();
       return false;
     }

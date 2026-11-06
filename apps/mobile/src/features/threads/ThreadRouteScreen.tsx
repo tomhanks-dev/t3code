@@ -1,3 +1,4 @@
+import { useMobileProfileRoute } from "../../state/sidebar-profiles";
 import * as Dialog from "../../components/ui/Dialog";
 import { useRememberThreadProject } from "./useRememberThreadProject";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
@@ -9,6 +10,7 @@ import { AppBar } from "../../components/ui/AppBar";
 import {
   StackActions,
   useNavigation,
+  useIsFocused,
   useRoute,
   type StaticScreenProps,
 } from "@react-navigation/native";
@@ -239,6 +241,13 @@ function LiveThreadRouteController(props: ThreadRouteScreenProps) {
   const connectionsReady = useConnectionsReady();
   const { connectionState } = useRemoteConnectionStatus();
   const { selectedThread } = useThreadSelection();
+  const nativeRoute = useRoute();
+  useMobileProfileRoute(
+    selectedThread
+      ? { environmentId: selectedThread.environmentId, projectId: selectedThread.projectId }
+      : null,
+    { key: nativeRoute.key, focused: useIsFocused() },
+  );
   const params = props.route.params ?? {};
   const environmentIdRaw = firstRouteParam(params.environmentId);
   const threadIdRaw = firstRouteParam(params.threadId);
@@ -247,7 +256,7 @@ function LiveThreadRouteController(props: ThreadRouteScreenProps) {
   const routeEnvironmentShellState = useEnvironmentShellReadiness(environmentId);
   const { onReconnectEnvironment } = useRemoteConnections();
   const navigation = useNavigation();
-  const routeName = useRoute().name;
+  const routeName = nativeRoute.name;
   const routeConnectionState =
     routeEnvironmentRuntime?.connectionState ?? (environmentId ? "available" : connectionState);
   const routeThreadKey =

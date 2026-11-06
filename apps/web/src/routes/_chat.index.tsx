@@ -1,3 +1,6 @@
+import { useClientSettingsHydrated } from "../hooks/useSettings";
+import { useProfilesActive, useSidebarProfiles } from "../sidebarProfiles";
+import { SidebarProfileLanding } from "../components/SidebarProfiles";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -30,7 +33,15 @@ function ChatIndexRouteView() {
     if (environments.length === 0) return <HostedEmptyState />;
   }
 
-  return <IndexDraftLanding />;
+  return <ProfileAwareLanding />;
+}
+
+export function ProfileAwareLanding() {
+  const profilesActive = useProfilesActive();
+  const profilesReady = useSidebarProfiles((state) => state.ready);
+  const settingsReady = useClientSettingsHydrated();
+  if (!profilesReady || !settingsReady) return null;
+  return profilesActive ? <SidebarProfileLanding /> : <IndexDraftLanding />;
 }
 
 function IndexDraftLanding() {

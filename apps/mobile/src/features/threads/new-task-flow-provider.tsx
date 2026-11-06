@@ -1,3 +1,4 @@
+import { useMobileProfileProjects } from "../../state/sidebar-profiles";
 import { ActiveNewTaskContext } from "../../state/active-new-task";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { useNowMinuteMs } from "../../lib/clock";
@@ -227,6 +228,7 @@ export function NewTaskFlowProvider(
   }>,
 ) {
   const projects = useProjects();
+  const profileProjects = useMobileProfileProjects();
   const threads = useThreadShells();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const groupingSettings = useMobileProjectGroupingSettings();
@@ -234,7 +236,7 @@ export function NewTaskFlowProvider(
 
   const projectScopes = sortHomeProjectScopes({
     scopes: buildHomeProjectScopes({
-      projects,
+      projects: profileProjects,
       environmentId: null,
       projectGroupingMode: groupingSettings.sidebarProjectGroupingMode,
     }),
@@ -402,6 +404,7 @@ export function NewTaskFlowProvider(
       selection,
       canChooseWorkspace,
       defaultMode: defaultWorkspaceMode,
+      defaultWorktreeBaseRef: projectDefaults.defaultWorktreeBaseRef,
       defaultModeSettled: projectDefaults.defaultWorkspaceModeSettled,
       isGitRepo,
       branches: allBranchRefs,
@@ -416,7 +419,10 @@ export function NewTaskFlowProvider(
   // value keeps tracking the server setting when the config loads late.
   const draftStartFromOrigin = selectedProjectDraft.workspaceSelection?.startFromOrigin;
   const startFromOrigin =
-    isGitRepo && (draftStartFromOrigin ?? projectSettings.settings.newWorktreesStartFromOrigin);
+    isGitRepo &&
+    (draftStartFromOrigin ??
+      (projectDefaults.defaultWorktreeBaseRef !== null ||
+        projectSettings.settings.newWorktreesStartFromOrigin));
   const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
   const managedPolicy = selectedEnvironmentServerConfig?.managedPolicy;
   const runtimeMode = resolveNewThreadRuntimeMode(

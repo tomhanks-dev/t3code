@@ -711,8 +711,8 @@ export default function ChatView(props: ChatViewProps) {
     setPendingServerThreadStartFromOriginByThreadId,
   ] = useState<Record<string, boolean>>({});
   const legendListRef = useRef<LegendListRef | null>(null);
-  const conversationArea = workspaceAreaProps("conversation", 1, "Conversation");
-  const composerArea = workspaceAreaProps("composer", 2, "Message input");
+  const conversationArea = workspaceAreaProps("conversation", 1, "Conversation", !embedded);
+  const composerArea = workspaceAreaProps("composer", 2, "Message input", !embedded);
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerTimelineInset, setComposerTimelineInset] = useState(0);
   const composerTimelineInsetRef = useRef(0);
@@ -1886,6 +1886,9 @@ export default function ChatView(props: ChatViewProps) {
   };
   const sendAppMessageStable = useStableCallback(sendAppMessage);
   const queuedRunsControlRef = useRef<QueuedRunsControlHandle>(null);
+  const sendLatestQueuedMessageStable = useStableCallback(() => {
+    queuedRunsControlRef.current?.sendLatest();
+  });
 
   const {
     activatePanelTerminalStable,
@@ -3747,6 +3750,9 @@ export default function ChatView(props: ChatViewProps) {
                                 onPageScrollRelease={onComposerPageScrollReleaseStable}
                                 onCompactContext={onComposerCompactContextStable}
                                 onSend={onComposerSendStable}
+                                onSendLatestQueuedMessage={
+                                  hasQueuedTurns ? sendLatestQueuedMessageStable : undefined
+                                }
                                 onResume={onComposerResumeStable}
                                 onInterrupt={onInterruptStable}
                                 onImplementPlanInNewThread={onImplementPlanInNewThreadStable}

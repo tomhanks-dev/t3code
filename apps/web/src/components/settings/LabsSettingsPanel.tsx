@@ -1,3 +1,9 @@
+import {
+  useSidebarProfiles,
+  mutateSidebarProfiles,
+  openProfileManager,
+} from "../../sidebarProfiles";
+import { updateClientSettings } from "../../hooks/useSettings";
 import { useAuth } from "@clerk/react";
 import { Link } from "@tanstack/react-router";
 import { managedCapabilityDenial } from "@t3tools/contracts";
@@ -23,6 +29,7 @@ export function LabsSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="beta" title="Beta">
         <BoringSidebarRow />
+        <SidebarProfilesRow />
         <BoringSidebarMultilineRow />
         <ToolCallVisibilityRow />
         {/* Clerk is only mounted when this build has T3 Connect. */}
@@ -243,6 +250,47 @@ function SimlockHostsRow() {
           }
           aria-label="Simlock device hosts"
         />
+      }
+    />
+  );
+}
+
+function SidebarProfilesRow() {
+  const enabled = useSidebarProfiles((s) => s.document.enabled);
+  const error = useSidebarProfiles((s) => s.error);
+  return (
+    <SettingsRow
+      {...searchableSetting("sidebar-profiles")}
+      description={
+        <>
+          Separate your projects into Work, Personal, and other contexts in the boring sidebar.
+          Profiles stay on this client.{error ? <span role="alert"> {error}</span> : null}
+        </>
+      }
+      control={
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => openProfileManager()}>
+            Manage profiles
+          </Button>
+          <Switch
+            checked={enabled}
+            aria-label="Sidebar profiles"
+            onCheckedChange={(checked) => {
+              void (async () => {
+                try {
+                  if (checked)
+                    await updateClientSettings({
+                      boringSidebarEnabled: true,
+                      legacySidebarEnabled: false,
+                    });
+                  await mutateSidebarProfiles({ kind: "enable", enabled: Boolean(checked) });
+                } catch {
+                  /* Persistence errors appear beside the control. */
+                }
+              })();
+            }}
+          />
+        </div>
       }
     />
   );

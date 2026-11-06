@@ -889,12 +889,11 @@ function makeLocalCommandHarness(input: {
           return { committed, storedEvents: [] };
         }),
   );
-  const resolveRuntimePolicy = vi.fn(
-    ({ thread }: Parameters<RuntimePolicy.RuntimePolicyV2Shape["resolve"]>[0]) =>
-      Effect.succeed({
-        cwd: thread.worktreePath ?? "/tmp/native-account-command",
-        runtimeMode: thread.runtimeMode,
-      } as never),
+  const resolveRuntimePolicy = vi.fn<RuntimePolicy.RuntimePolicyV2Shape["resolve"]>(({ thread }) =>
+    Effect.succeed({
+      cwd: thread.worktreePath ?? "/tmp/native-account-command",
+      runtimeMode: thread.runtimeMode,
+    } as never),
   );
   const createWorktree = vi.fn<GitWorkflow.GitWorkflowService["Service"]["createWorktree"]>(() =>
     Effect.succeed({} as never),
@@ -1301,6 +1300,44 @@ effectIt.effect.each([
           delivery: { nativeThreadId: "side-chat-native", status: "inline" },
         },
       ]);
+    }),
+);
+
+effectIt.effect(
+  "a side chat with inherited full access still obeys the managed policy ceiling",
+  () =>
+    Effect.gen(function* () {
+      const harness = makeLocalCommandHarness({
+        text: "What is the main thread doing?",
+        sideChat: { contextRun: "current", threadRuntimeMode: "full-access" },
+      });
+      harness.resolveRuntimePolicy.mockImplementation(({ thread }) =>
+        thread.runtimeMode === "full-access"
+          ? Effect.fail(
+              new RuntimePolicy.RuntimePolicyAboveCeilingError({
+                threadId: thread.id,
+                runtimeMode: thread.runtimeMode,
+                maxRuntimeMode: "approval-required",
+                organization: "Test organization",
+              }),
+            )
+          : Effect.succeed({} as never),
+      );
+
+      yield* harness.start;
+
+      expect(harness.open).not.toHaveBeenCalled();
+      expect(harness.startRootRun).not.toHaveBeenCalled();
+      expect(harness.projection().runs[0]?.status).toBe("failed");
+      expect(harness.events).toContainEqual(
+        expect.objectContaining({
+          type: "turn-item.updated",
+          payload: expect.objectContaining({
+            type: "error",
+            title: "Thread mode is above the policy limit",
+          }),
+        }),
+      );
     }),
 );
 

@@ -46,6 +46,16 @@ function loadRouters() {
   };
 }
 
+vi.mock("../profiles/CreationProfileSelect", () => ({ CreationProfileSelect: () => null }));
+vi.mock("../../state/sidebar-profiles", async () => {
+  const entities = await import("../../state/entities");
+  return {
+    useMobileProfileProjects: entities.useProjects,
+    useMobileProfileRoute: () => undefined,
+    mobileCreationProfile: () => "general",
+    assignMobileCreatedProject: async () => undefined,
+  };
+});
 vi.mock("../layout/workspace/useSelectWorkspaceDetail", async () => {
   const { selectWorkspaceDetail } = await import("../layout/workspace/workspace-detail-selection");
   return {

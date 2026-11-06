@@ -1,3 +1,5 @@
+import { useMobileProfileProjects, useMobileSidebarProfiles } from "../../state/sidebar-profiles";
+import { MobileSidebarProfiles } from "../profiles/SidebarProfiles";
 import { uuidv4 } from "../../lib/uuid";
 import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { use } from "react";
@@ -14,7 +16,6 @@ import {
   resolveScratchProjectScopeKey,
 } from "@t3tools/client-runtime/state/project-grouping";
 
-import { useProjects } from "../../state/entities";
 import { environmentThreadShells } from "../../state/threads";
 import { usePendingNewTasks } from "../../state/use-pending-new-tasks";
 import { useWorkspaceState } from "../../state/workspace";
@@ -40,13 +41,18 @@ export function HomeRouteScreen() {
   const { layout, primarySidebarSearchQuery, setPrimarySidebarSearchQuery, startNewTask } =
     useAdaptiveWorkspaceLayout();
   const selectDetail = useSelectWorkspaceDetail();
-  const projects = useProjects();
+  const projects = useMobileProfileProjects();
+  const { document: profileDocument } = useMobileSidebarProfiles();
+  const profileProjectKeys = new Set(projects.map((p) => `${p.environmentId}:${p.id}`));
   // Stop rebuilding the streaming thread list while Thread covers Home.
   const visible = useHomeRouteVisible();
-  const threads = useAtomValueWhileVisible(
+  const allThreads = useAtomValueWhileVisible(
     environmentThreadShells.navigationThreadShellsAtom,
     visible,
   );
+  const threads = profileDocument.enabled
+    ? allThreads.filter((t) => profileProjectKeys.has(`${t.environmentId}:${t.projectId}`))
+    : allThreads;
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const navigation = useNavigation();
@@ -95,7 +101,10 @@ export function HomeRouteScreen() {
     regenerateThreadTitle,
     unsettleThread,
   } = useThreadListActions();
-  const pendingTasks = usePendingNewTasks();
+  const allPendingTasks = usePendingNewTasks();
+  const pendingTasks = profileDocument.enabled
+    ? allPendingTasks.filter((t) => profileProjectKeys.has(`${t.environmentId}:${t.projectId}`))
+    : allPendingTasks;
   const { openPendingTask, confirmDeletePendingTask } =
     usePendingTaskListActions(selectThreadRoute);
   const connectionStateByEnvironmentId = new Map(
@@ -120,7 +129,11 @@ export function HomeRouteScreen() {
     setSelectedEnvironmentId,
     setSelectedProjectKey,
   } = useHomeListOptions(availableEnvironmentIds);
-  const selectedEnvironmentId = listOptions.selectedEnvironmentId;
+  const selectedEnvironmentId =
+    profileDocument.enabled &&
+    !projects.some((p) => p.environmentId === listOptions.selectedEnvironmentId)
+      ? null
+      : listOptions.selectedEnvironmentId;
   // A legacy per-environment scratch key resolves here on every render; the stored
   // value is only rewritten when the user picks a filter.
   const resolvedProjectKey = resolveScratchProjectScopeKey(
@@ -164,6 +177,7 @@ export function HomeRouteScreen() {
   return (
     <AndroidHomeFabLayout onStartNewTask={startNewTask}>
       <>
+        <MobileSidebarProfiles />
         <WorkspaceListHeader
           accessibilityLabel="T3 Code, Threads"
           onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}

@@ -890,30 +890,26 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
   return "ready";
 }
 
-/**
- * The dot on a closed boring-sidebar folder: the most urgent state among its
- * hidden threads. Waiting threads stay quiet, like their rows.
- */
-export function resolveSidebarFolderDot(
+export function resolveSidebarFolderSummary(
   threads: ReadonlyArray<ThreadStatusInput & SidebarThreadStatusInput>,
-): "attention" | "failed" | "unread" | "working" | null {
-  const statuses = new Set(threads.map(resolveSidebarThreadStatus));
-  if (
-    statuses.has("input") ||
-    statuses.has("approval") ||
-    statuses.has("request") ||
-    statuses.has("limited")
-  ) {
-    return "attention";
+) {
+  const counts = {
+    total: threads.length,
+    attention: 0,
+    failed: 0,
+    unread: 0,
+    working: 0,
+    quiet: 0,
+  };
+  for (const thread of threads) {
+    const status = resolveSidebarThreadStatus(thread);
+    if (["input", "approval", "request", "limited"].includes(status)) counts.attention++;
+    else if (status === "failed") counts.failed++;
+    else if (status === "working" || status === "preparing") counts.working++;
+    else if (status === "ready" && hasUnseenCompletion(thread)) counts.unread++;
+    else counts.quiet++;
   }
-  if (statuses.has("failed")) return "failed";
-  // Rows show Done only for ready threads, so the dot follows the same rule.
-  const hasUnread = threads.some(
-    (thread) => resolveSidebarThreadStatus(thread) === "ready" && hasUnseenCompletion(thread),
-  );
-  if (hasUnread) return "unread";
-  if (statuses.has("working") || statuses.has("preparing")) return "working";
-  return null;
+  return counts;
 }
 
 /**
@@ -964,6 +960,37 @@ export function groupSidebarThreadsByProject<
     folderByProject.get(`${thread.environmentId}:${thread.projectId}`)?.threads.push(thread);
   }
   return folders.filter((folder) => folder.threads.length > 0 || keepEmpty(folder.group));
+}
+
+export function resolveSidebarProjectFolder<
+  T extends Pick<SidebarThreadSummary, "id" | "environmentId">,
+>(input: {
+  readonly threads: readonly T[];
+  readonly workingKeys: ReadonlySet<string>;
+  readonly collapsed: boolean;
+  readonly workingExpanded: boolean;
+  readonly routeThreadKey: string | null;
+}) {
+  const threads: T[] = [];
+  const workingThreads: T[] = [];
+  const hiddenThreads: T[] = [];
+  let workingCount = 0;
+  for (const thread of input.threads) {
+    const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    const working = input.workingKeys.has(key);
+    if (working) workingCount++;
+    const visible =
+      key === input.routeThreadKey || (!input.collapsed && (!working || input.workingExpanded));
+    if (visible) (working ? workingThreads : threads).push(thread);
+    else if (input.collapsed) hiddenThreads.push(thread);
+  }
+  return {
+    threads,
+    workingThreads,
+    hiddenThreads,
+    workingCount,
+    showWorkingHeader: !input.collapsed && workingCount > 0,
+  };
 }
 
 export type SidebarV2TopStatusKind =
@@ -1096,8 +1123,8 @@ export function resolveThreadStatusPill(input: {
   if (thread.hasPendingApprovals || thread.pendingSubagentRequest === "approval") {
     return {
       label: "Pending Approval",
-      colorClass: "text-amber-600 dark:text-amber-300/90",
-      dotClass: "bg-amber-500 dark:bg-amber-300/90",
+      colorClass: "text-warning-foreground",
+      dotClass: "bg-warning",
       pulse: false,
     };
   }
@@ -1105,8 +1132,8 @@ export function resolveThreadStatusPill(input: {
   if (thread.hasPendingUserInput || thread.pendingSubagentRequest === "user_input") {
     return {
       label: "Awaiting Input",
-      colorClass: "text-indigo-600 dark:text-indigo-300/90",
-      dotClass: "bg-indigo-500 dark:bg-indigo-300/90",
+      colorClass: "text-warning-foreground",
+      dotClass: "bg-warning",
       pulse: false,
     };
   }
@@ -1114,8 +1141,8 @@ export function resolveThreadStatusPill(input: {
   if ((thread.pendingGuestMessageCount ?? 0) > 0) {
     return {
       label: "Guest Request",
-      colorClass: "text-guest-foreground",
-      dotClass: "bg-guest",
+      colorClass: "text-warning-foreground",
+      dotClass: "bg-warning",
       pulse: false,
     };
   }

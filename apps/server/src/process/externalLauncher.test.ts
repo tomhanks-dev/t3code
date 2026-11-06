@@ -61,6 +61,7 @@ const layerTest = (input: {
   readonly platform: NodeJS.Platform;
   readonly env?: Record<string, string>;
   readonly resolveExecutable?: (command: string) => string | undefined;
+  readonly fileSystem?: FileSystem.FileSystem;
   readonly onSpawn?: (command: ChildProcess.StandardCommand) => void;
   readonly onUnref?: () => void;
   readonly spawnResult?: (command: ChildProcess.StandardCommand) => MockSpawnResult | undefined;
@@ -85,7 +86,15 @@ const layerTest = (input: {
   );
 
   return Layer.mergeAll(
-    ExternalLauncher.layer.pipe(Layer.provide(Layer.merge(NodeServices.layer, layerSpawner))),
+    ExternalLauncher.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          layerSpawner,
+          ...(input.fileSystem ? [Layer.succeed(FileSystem.FileSystem, input.fileSystem)] : []),
+        ),
+      ),
+    ),
     Layer.succeed(HostProcess.Platform, input.platform),
     Layer.succeed(
       SpawnExecutableResolution,
@@ -618,6 +627,20 @@ it.effect("keeps the macOS VS Code Insiders bundle out of stable VS Code", () =>
         layerTest({
           platform: "darwin",
           env: { HOME: home, PATH: path.join(home, "empty") },
+          fileSystem: {
+            ...fs,
+            // Installed system apps must not participate in this fixture's bundle discovery.
+            stat: (target) =>
+              target.startsWith("/Applications/")
+                ? Effect.fail(
+                    PlatformError.systemError({
+                      _tag: "NotFound",
+                      module: "FileSystem",
+                      method: "stat",
+                    }),
+                  )
+                : fs.stat(target),
+          },
           onSpawn: (command) => {
             spawned = command;
           },

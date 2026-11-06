@@ -47,6 +47,15 @@ function useSnapshot(): Snapshot {
   return useSyncExternalStore(harness.subscribe, () => harness.state.snapshot!);
 }
 
+vi.mock("../../state/sidebar-profiles", async () => {
+  const entities = await import("../../state/entities");
+  return {
+    useMobileProfileProjects: entities.useProjects,
+    useMobileProfileRoute: () => undefined,
+    mobileCreationProfile: () => "general",
+    assignMobileCreatedProject: async () => undefined,
+  };
+});
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
@@ -88,6 +97,7 @@ vi.mock("../../state/workspace", () => ({
 }));
 vi.mock("../../state/vcs", () => ({ vcsEnvironment: { readRefs: {}, switchRef: {} } }));
 vi.mock("@react-navigation/native", () => ({
+  useIsFocused: () => true,
   CommonActions: { goBack: () => ({ type: "GO_BACK" }) },
   createNavigationContainerRef: () => ({ current: null }),
   // Main-comparison only, like the mocks above.

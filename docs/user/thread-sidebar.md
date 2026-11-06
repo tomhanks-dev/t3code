@@ -157,7 +157,12 @@ project's folder comes last and shows only while it has active threads. Click a 
 close it. A closed folder shows how many threads it holds, and a dot when one of them
 needs you. Use the pen button on a folder, or right-click it, to start a thread in that project.
 Pinned threads stay above the folders, and Snoozed and Settled stay below them. In this mode you
-cannot drag threads, and the Working section is off. Each device keeps its own choice.
+cannot drag threads. With **Working section** enabled, each project folds its background
+work into its own collapsed Working section. Finished work and requests for your input return
+to the project's ordinary list. The conversation you have open stays visible even while its
+section is collapsed. Working sections remember their open state per project and profile.
+Turn off **Settings → General → Working section** to keep running threads in the ordinary
+project list. Each device keeps its own choice.
 
 ## Settle finished work
 
@@ -335,3 +340,30 @@ A snoozed thread keeps working and stays hidden until its wake time, even while
 its agent wakes itself for background work. It comes back early for an approval,
 a new question, a failed run, or a message or answer you send. You can snooze an existing
 question and answer when the thread wakes; the question stays unanswered.
+
+## Sidebar profiles (Labs)
+
+Enable **Settings → Labs → Sidebar profiles** to separate Work, Personal, and other
+contexts. On web and desktop this also enables the boring sidebar. Use **Manage
+profiles** to create, rename, reorder, or delete profiles, assign individual
+projects, and choose an environment's default profile. Projects without an
+individual assignment inherit that default, including projects created later.
+The same environment can hold projects from several profiles.
+
+Switch profiles from the sidebar. **All** shows every profile. New projects use
+the selected profile; the creation flow lets you choose another. To move an
+existing project, right-click its folder and choose **Move to profile**, or use
+the project list in Manage profiles. A grouped folder moves only its currently
+visible project copies. Deleting a profile moves its assignments to a destination
+you choose; General can be renamed but cannot be deleted.
+
+On web and desktop, add keybindings for **Profiles: Next Profile** and **Profiles: Previous Profile**
+in **Settings → Keybindings**. They cycle through your saved profile order,
+including All profiles after the last profile and wrapping at the ends. No keys
+are assigned by default.
+
+Profiles are saved separately on each desktop installation, browser origin, and
+mobile device. They organize navigation rather than access: switching keeps
+agents running and connections available. Opening a thread link reveals its
+owning profile. Turning profiles off, or returning to the V2 sidebar, retains
+your assignments and shows all projects again.

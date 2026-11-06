@@ -475,6 +475,7 @@ export interface ChatComposerProps {
     dispatchMode?: ComposerDispatchMode,
     submissionIntent?: ComposerSubmissionIntent,
   ) => void;
+  onSendLatestQueuedMessage?: (() => void) | undefined;
   onResume: () => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
@@ -587,6 +588,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onPageScrollRelease,
     onCompactContext,
     onSend,
+    onSendLatestQueuedMessage,
     onResume,
     onInterrupt,
     onImplementPlanInNewThread,
@@ -2220,7 +2222,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         sendShortcut: settings.sendShortcut,
         prompt: promptRef.current,
       });
-      if (!intent) return;
+      if (!intent || intent === "queued-message") return;
       event.preventDefault();
       event.stopImmediatePropagation();
       submitComposer(
@@ -2308,6 +2310,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const expandMobileComposerStable = useStableCallback(expandMobileComposer);
 
+  const canSendQueuedMessage =
+    canOperateThread &&
+    !isSendDisabled &&
+    !environmentUnavailable &&
+    !isEditingQueuedMessage &&
+    pendingUserInputs.length === 0 &&
+    pendingApprovals.length === 0 &&
+    !showPlanFollowUpPrompt &&
+    !composerDraftHasUserContent(composerDraft) &&
+    !pendingDraftWork.has(attachmentTargetKey) &&
+    countPreparingComposerImages(attachmentTargetKey) === 0;
+
   const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) =>
     composerCommandKeyHandler({
       keybindings,
@@ -2315,6 +2329,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       routeKind,
       phase,
       isCompacting,
+      isComposerEmpty:
+        canSendQueuedMessage && !composerDraftHasUserContent(getComposerDraft(composerDraftTarget)),
+      onSendLatestQueuedMessage: () => onSendLatestQueuedMessage?.(),
       followUpBehavior,
       isSoftwareKeyboardOpen,
       planModeUiEnabled,
@@ -3666,6 +3683,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     preserveComposerFocusOnPointerDown={isMobileViewport}
                     isEditingQueuedMessage={isEditingQueuedMessage}
                     onSubmitMessage={handleSubmitMessageStable}
+                    onSendLatestQueuedMessage={
+                      canSendQueuedMessage ? onSendLatestQueuedMessage : undefined
+                    }
                     onResume={onResume}
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryActionStable}

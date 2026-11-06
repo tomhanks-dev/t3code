@@ -1,3 +1,4 @@
+import { MobileSidebarProfiles } from "../profiles/SidebarProfiles";
 import { Button } from "../../components/ui/Button";
 import {
   AuthSettingsWriteScope,
@@ -44,6 +45,7 @@ export function SettingsLabsRouteScreen() {
         contentContainerClassName="gap-6 px-5 pt-4"
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
       >
+        <MobileSidebarProfiles labs />
         <ToolCallVisibilitySection />
         <BetaSettingsSection />
         <LegacySettingsSection />

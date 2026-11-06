@@ -1,3 +1,11 @@
+import {
+  currentCreationProfile,
+  useProfilesActive,
+  assignCreatedProject,
+  projectProfile,
+  useProfileProjects,
+} from "../sidebarProfiles";
+import { ProfileSelect } from "./SidebarProfiles";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -399,6 +407,9 @@ function OpenCommandPaletteDialog(props: {
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
+  const profilesActive = useProfilesActive();
+  const [creationProfile, setCreationProfile] = useState(currentCreationProfile);
+  const profileProjects = useProfileProjects();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   // Keyed by palette session: the intent and restored search only seed this
@@ -501,7 +512,14 @@ function OpenCommandPaletteDialog(props: {
     await copyThreadReference(activeThreadReferenceCopyTarget);
   };
   // Side chats and subagents open inside their parent, so opening a project never lands on one.
-  const threads = useVisibleThreadShells().filter((thread) => !isSidebarHiddenThread(thread));
+  const profileKeys = new Set(
+    profileProjects.map((project) => `${project.environmentId}:${project.id}`),
+  );
+  const threads = useVisibleThreadShells().filter(
+    (thread) =>
+      !isSidebarHiddenThread(thread) &&
+      (!profilesActive || profileKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+  );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const providersByEnvironment = useEnvironmentProviders();
   const { changeThemeItem, changeAppearanceItem, themeEditorItem } = useCommandPaletteThemeItems();
@@ -1822,6 +1840,7 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
+    const targetProfile = creationProfile;
     const cwd = resolveProjectPathForDispatch(rawCwd, input.currentProjectCwd);
     if (cwd.length === 0) return;
 
@@ -1830,6 +1849,20 @@ function OpenCommandPaletteDialog(props: {
       cwd,
     );
     if (existing) {
+      if (
+        profilesActive &&
+        projectProfile({ environmentId: existing.environmentId, projectId: existing.id }) !==
+          targetProfile
+      ) {
+        const move = window.confirm(
+          "This project belongs to another profile. Move it here? Cancel opens it in its current profile.",
+        );
+        if (move)
+          await assignCreatedProject(
+            { environmentId: existing.environmentId, projectId: existing.id },
+            targetProfile,
+          );
+      }
       // Adding an archived project's folder again brings the project back.
       if (existing.archivedAt != null) {
         void updateProject({
@@ -1904,6 +1937,8 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
+    if (profilesActive)
+      await assignCreatedProject(scopeProjectRef(input.environmentId, projectId), targetProfile);
     const navigationResult = await settlePromise(() =>
       handleNewThread(scopeProjectRef(input.environmentId, projectId)),
     );
@@ -1954,6 +1989,7 @@ function OpenCommandPaletteDialog(props: {
       createNewProject({
         environmentId: newProjectFlow.environmentId,
         name: newProjectName,
+        profileId: profilesActive ? creationProfile : undefined,
         publishTo: newProjectPublishes ? newProjectPublishTarget : null,
       }),
     );
@@ -2127,6 +2163,7 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
+    const targetProfile = creationProfile;
     const projectId = newProjectId();
     setIsRemoteProjectCloning(true);
     const startResult = await startProjectClone({
@@ -2153,6 +2190,11 @@ function OpenCommandPaletteDialog(props: {
       }
       return;
     }
+    if (profilesActive)
+      await assignCreatedProject(
+        scopeProjectRef(addProjectCloneFlow.environmentId, projectId),
+        targetProfile,
+      );
     setOpen(false);
     void suggestAppAccessForRemote(
       addProjectCloneFlow.environmentId,
@@ -2814,20 +2856,31 @@ function OpenCommandPaletteDialog(props: {
           ? "Select"
           : undefined;
 
-  const footerTrailing = canOpenProjectFromFileManager ? (
-    <CommandFooterAction
-      disabled={isPickingProjectFolder}
-      onClick={() => {
-        void handleOpenProjectFromFileManager();
-      }}
-    >
-      {`Open in ${fileManagerName}`}
-    </CommandFooterAction>
-  ) : isThreadSearchPending && !isLinkedThreadSearch && !isBrowsing ? (
-    // In the footer, so the list keeps its height while message results may
-    // still arrive below it.
-    <span className="text-muted-foreground text-xs">Searching messages…</span>
-  ) : null;
+  const footerTrailing =
+    profilesActive &&
+    (isBrowsing ||
+      newProjectFlow ||
+      addProjectCloneFlow ||
+      props.openIntent?.kind === "add-project") ? (
+      <ProfileSelect
+        value={creationProfile}
+        onChange={setCreationProfile}
+        label="Profile for this project"
+      />
+    ) : canOpenProjectFromFileManager ? (
+      <CommandFooterAction
+        disabled={isPickingProjectFolder}
+        onClick={() => {
+          void handleOpenProjectFromFileManager();
+        }}
+      >
+        {`Open in ${fileManagerName}`}
+      </CommandFooterAction>
+    ) : isThreadSearchPending && !isLinkedThreadSearch && !isBrowsing ? (
+      // In the footer, so the list keeps its height while message results may
+      // still arrive below it.
+      <span className="text-muted-foreground text-xs">Searching messages…</span>
+    ) : null;
 
   return (
     <CommandPaletteContent
